@@ -45,35 +45,37 @@ names — works with `small.en`/`large-v3`, **not** with distil-* models).
 ## Measured results (HX 370 / Radeon 890M, CT2 4.8.3 ROCm wheel)
 
 Latency = `AudioStop` → `Transcript`, i.e. what you actually wait for in a
-voice pipeline. Same-box comparison against a running CPU `base.en` int8
-linuxserver deployment.
+voice pipeline. All rows same model (`small.en`), same box, capped
+throwaway containers, benchmark client external.
 
-| Audio | GPU `small.en` fp16 | CPU `base.en` int8 (prior prod) |
+| Audio | GPU fp16 | CPU int8 (4 threads) |
 |---|---|---|
-| 11 s clip | 0.89 s (12.4x RT) | 0.48 s (23x RT) |
-| 32 s clip | 2.29 s (14.0x RT) | *see Known issues — CPU mode on this image wedged* |
-| 3.5 s command | 1.37 s | 0.44 s |
+| 11 s clip | **0.47 s** (23x RT) | 0.86 s (12.8x RT) |
+| 32 s long-form | 2.34 s (13.7x RT) | **1.83 s** (17.6x RT) |
 
-Read the table honestly: **GPU `small.en` is not lower-latency than CPU
-`base.en` — it is a noticeably better model at comparable latency that leaves
-the CPU cores free** (transcripts above were byte-identical on clean audio;
-`small.en` earns its keep on harder audio and names, which is also what the
-`--hass-token` biasing builds on). For short commands either is instant to a
-human. The GPU path held 14x realtime sustained on long-form audio with the
-GPU, not the CPU, doing the work.
+For reference, the prior production deployment (CPU `base.en` int8, all
+cores) ran the 11 s clip in 0.48 s. Read the table honestly:
+
+- **Short clips (the voice-assistant regime): GPU wins ~1.8x** and leaves the
+  CPU cores free for the rest of your stack.
+- **Long-form: CPU int8 won here even with only 4 of 24 threads.** The 890M
+  is not a throughput miracle for small models; its value is freeing CPU and
+  making *bigger* models (medium, large-v3) practical, where CPU inference
+  falls off a cliff.
+- TTS note: measured wyoming-piper (`en_US-lessac-medium`) on the same box at
+  85 ms to first audio chunk, warm. If your Assist pipeline feels slow, the
+  LLM leg is almost certainly the bottleneck, not STT/TTS.
 
 ## Known issues (measured, not theoretical)
 
 - **Pin `av<19`.** faster-whisper 1.2.1 calls `av.open(metadata_errors=...)`;
   PyAV 19 removed that kwarg, so an unpinned install fails every request with
   `TypeError`. This image pins `av<19`; remove the pin when upstream fixes it.
-- **Do not run `WYO_WHISPER_DEVICE=cpu` on this image.** In testing, CPU int8
-  requests through the ROCm CT2 wheel never completed (wedged server-side)
-  while GPU requests on the same container ran correctly throughout. GPU is
-  the point of this image; for CPU inference use the upstream images.
+  (An earlier revision of this README claimed CPU mode itself wedged — that
+  was this bug misdiagnosed on a stale image. CPU mode works; see the table.)
 - **Resource caps matter on APUs.** GPU buffers come from system RAM, and
   containers without `mem_limit` can OOM-kill their way through a shared host
-  (this happened during development: a runaway benchmark client, uncapped,
+  (this happened during development: an uncapped runaway benchmark client
   starved sshd/DNS/Home Assistant on the box). Keep the `mem_limit` / `cpus`
   values or set your own.
 - `pip check` may report conflicts inside the `rocm/pytorch` base image
