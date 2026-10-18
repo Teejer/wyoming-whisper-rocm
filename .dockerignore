@@ -1,0 +1,8 @@
+# Runtime model cache + benchmark data must never enter the build context.
+# Without this, once ./data is populated the classic builder aborts with
+# "can't stat .../data/cache" (that dir is root-owned 0700 at runtime).
+data/
+*.log
+.git/
+__pycache__/
+*.wav
