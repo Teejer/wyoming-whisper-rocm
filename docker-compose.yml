@@ -32,6 +32,9 @@ services:
       - WYO_WHISPER_BEAM_SIZE=1
       # Optional name biasing: feeds entity/area names from HA into the prompt
       # so "Ecobee" stops transcribing as "incubi". Needs a long-lived token.
+      # If HA serves TLS on 8123, use its real hostname (https://ha.example.com:8123/api);
+      # plain http to a TLS port fails opaquely ("Server disconnected"), and an
+      # IP-based https URL fails the cert's DNS-only SAN.
       # - WYO_WHISPER_HASS_TOKEN_FILE=/run/secrets/hass_token
       # - WYO_WHISPER_HASS_API=http://127.0.0.1:8123/api
     volumes:
