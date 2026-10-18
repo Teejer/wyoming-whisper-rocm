@@ -1,0 +1,39 @@
+# Wyoming faster-whisper STT on AMD ROCm GPUs — built for the Radeon 890M
+# (gfx1150, Ryzen AI 300 "Strix Point"); CT2 ROCm wheels also carry gfx1151
+# (Strix Halo), RDNA3 and RDNA4 kernels.
+#
+# Home Assistant consumption: this is a drop-in replacement for any wyoming
+# faster-whisper service (e.g. the linuxserver.io one). Point your existing
+# Home Assistant Wyoming integration at the port below; nothing else changes.
+
+services:
+  whisper-gpu:
+    build: .
+    image: wyoming-whisper-rocm:latest
+    container_name: whisper-gpu
+    network_mode: host
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video   # /dev/dri access; /dev/kfd perms vary by distro
+    # Hard caps: an APU serves GPU buffers from system RAM, so the CT2 GPU
+    # working set lands in this cgroup. 8g fits large-v3 fp16 with headroom.
+    # cpus keeps a runaway from starving the rest of the host (measured the
+    # hard way: an uncapped leak took down ssh/DNS/HA on a shared box).
+    mem_limit: 8g
+    cpus: "12"
+    environment:
+      - WYO_WHISPER_URI=tcp://0.0.0.0:10300
+      - WYO_WHISPER_MODEL=small.en
+      - WYO_WHISPER_LANGUAGE=en
+      - WYO_WHISPER_DEVICE=cuda        # CT2 calls ROCm "cuda"; do not use "cpu"
+      - WYO_WHISPER_COMPUTE_TYPE=float16
+      - WYO_WHISPER_BEAM_SIZE=1
+      # Optional name biasing: feeds entity/area names from HA into the prompt
+      # so "Ecobee" stops transcribing as "incubi". Needs a long-lived token.
+      # - WYO_WHISPER_HASS_TOKEN_FILE=/run/secrets/hass_token
+      # - WYO_WHISPER_HASS_API=http://127.0.0.1:8123/api
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
